@@ -3,7 +3,7 @@ import socket
 
 HOST = '127.0.0.1'
 PORT = 65000
-BUF_SIZE = 512
+BUF_SIZE = 32
 
 
 if __name__ == '__main__':
