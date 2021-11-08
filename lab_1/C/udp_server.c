@@ -30,8 +30,9 @@ int main(int argc, char **argv) {
     }
     
     printf("Will listen on %s:%d\n", HOST, PORT);
-    memset(buf, 0, BUF_SIZE);
+    memset(buf, 0, BUF_SIZE);   // Found problem 
     while(1) {
+        cli_len = sizeof(client);
         result = recvfrom(sock, buf, sizeof(buf), 0, (struct sockaddr *) &client, &cli_len);
         if (result == -1) {
             perror("receiving datagram packet");
