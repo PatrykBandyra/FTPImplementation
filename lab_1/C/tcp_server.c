@@ -36,6 +36,10 @@ int main(int argc, char **argv) {
     do {
         cli_len = sizeof(client);
         msgsock = accept(sock, (struct sockaddr *) &client, &cli_len);
+
+        char *cli_addr = inet_ntoa(client.sin_addr);
+        printf("Connected from: ('%s', %d)\n", cli_addr, client.sin_port);
+
         if (msgsock == -1 ) {
              perror("accept");
              exit(3);
@@ -49,7 +53,7 @@ int main(int argc, char **argv) {
                 printf("Connection closed by client\n");
             else {
                 buf[BUF_SIZE] = '\0';
-                char *cli_addr = inet_ntoa(client.sin_addr);
+
                 printf("Message from client ('%s', %d): %s\n", cli_addr, client.sin_port, buf);
             }
         } while (result != 0);
