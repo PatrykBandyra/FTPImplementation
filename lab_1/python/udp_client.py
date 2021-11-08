@@ -12,5 +12,5 @@ if __name__ == '__main__':
         message = MESSAGE.encode('ascii')
         for i in range(MESSAGE_NUM):
             s.sendto(message, (HOST, PORT))
-            print(f'Message {i} sent')
+            print(f'Message {i+1} sent')
     print('Client closed')
