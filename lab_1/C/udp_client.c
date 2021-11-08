@@ -6,14 +6,15 @@
 
 #define HOST        "127.0.0.1"
 #define PORT        65000
-#define BUF_SIZE    512
+#define BUF_SIZE    32
 #define MESSAGE     "Hello darkness, my old friend..."
 #define MESSAGE_NUM 10
 
 int main(int argc, char *argv) {
     int sock;
     struct sockaddr_in server;
-    char buf[BUF_SIZE];
+    char msg[BUF_SIZE];
+    memcpy(msg, MESSAGE, BUF_SIZE);
 
     /* Create socket. */
     sock = socket(AF_INET, SOCK_DGRAM, 0 );
@@ -26,8 +27,8 @@ int main(int argc, char *argv) {
     server.sin_port = htons(PORT);
     server.sin_addr.s_addr = inet_addr(HOST);
 
-    for (int i = 1; i <= 10; i++) {
-        if (sendto(sock, MESSAGE, sizeof MESSAGE ,0, (struct sockaddr *) &server,sizeof server) == -1)
+    for (int i = 1; i <= MESSAGE_NUM; i++) {
+        if (sendto(sock, msg, sizeof(msg) , 0, (struct sockaddr *) &server,sizeof server) == -1)
             perror("sending datagram message");
         printf("Message %d sent\n", i);
     }

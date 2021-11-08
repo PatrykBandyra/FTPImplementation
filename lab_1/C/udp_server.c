@@ -7,7 +7,7 @@
 
 #define HOST     "127.0.0.1"   
 #define PORT     65000
-#define BUF_SIZE 512
+#define BUF_SIZE 32
   
 int main(int argc, char **argv) {
     int sock, length, result, cli_len;
@@ -32,11 +32,12 @@ int main(int argc, char **argv) {
     printf("Will listen on %s:%d\n", HOST, PORT);
     memset(buf, 0, BUF_SIZE);
     while(1) {
-        result = recvfrom(sock, buf, BUF_SIZE, 0, (struct sockaddr *) &client, &cli_len);
+        result = recvfrom(sock, buf, sizeof(buf), 0, (struct sockaddr *) &client, &cli_len);
         if (result == -1) {
             perror("receiving datagram packet");
             exit(2);
         }
+        buf[BUF_SIZE] = '\0';
         char *cli_addr = inet_ntoa(client.sin_addr);
         printf("Message from client ('%s', %d): %s\n", cli_addr, client.sin_port, buf);
     }
