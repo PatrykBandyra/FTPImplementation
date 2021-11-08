@@ -7,7 +7,7 @@
 
 #define HOST     "127.0.0.1"   
 #define PORT     65000
-#define BUF_SIZE 512
+#define BUF_SIZE 32
   
 int main(int argc, char **argv) {
     int sock, length, msgsock, result, cli_len;
@@ -26,29 +26,33 @@ int main(int argc, char **argv) {
 
     if (bind(sock, (struct sockaddr *) &server, sizeof server) == -1) {
         perror("Binding stream socket");
-        exit(1);
+        exit(2);
     }
-    printf("Will listen on %s:%d\n", HOST, PORT);
 
-    length = sizeof server;
     listen(sock, 5);
+    printf("Will listen on %s:%d\n", HOST, PORT);
+    memset(buf, 0, BUF_SIZE);
 
-    msgsock = accept(sock,(struct sockaddr *) 0,(int *) 0);
-    if (msgsock == -1) {
-        perror("accept"); 
-        exit(3);
-    } else {
-        while(1) {
-            memset(buf, 0, BUF_SIZE);
-            result = recvfrom(sock, buf, BUF_SIZE, 0, (struct sockaddr *) &client, &cli_len);
+    do {
+        cli_len = sizeof(client);
+        msgsock = accept(sock, (struct sockaddr *) &client, &cli_len);
+        if (msgsock == -1 ) {
+             perror("accept");
+             exit(3);
+        } else do {
+            // memset(buf, 0, BUF_SIZE);
+            result = read(msgsock, buf, sizeof(buf));
             if (result == -1) {
                 perror("reading stream message");
-                exit(4);
+                exit(4); }
+            if (result == 0)
+                printf("Connection closed by client\n");
+            else {
+                buf[BUF_SIZE] = '\0';
+                char *cli_addr = inet_ntoa(client.sin_addr);
+                printf("Message from client ('%s', %d): %s\n", cli_addr, client.sin_port, buf);
             }
-            char *cli_addr = inet_ntoa(client.sin_addr);
-            printf("Message from client ('%s', %d): %s\n", cli_addr, client.sin_port, buf);
-        }
-    }
-    close(msgsock);
-    return 0;
+        } while (result != 0);
+    } while(1);
+    exit(0);
 }
