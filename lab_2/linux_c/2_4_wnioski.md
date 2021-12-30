@@ -1,0 +1,9 @@
+**Wnioski do zadania 2.4**
+
+Po zmodyfikowaniu serwera w sposób zadany w zadaniu, czyli dodaniu sztucznego opóźnienia pomiędzy odczytem kolejnych wiadomości, obserwuję spowolnienie nadawcy przez stos TCP. W przypadku mojej platformy testowej klient wysyłał 2500 pakietów danych 1 kB każdy, a następnie się blokował usiłując wysłać kolejne (plik client_2_4.c). W międzyczasie z interwałem 1 sekundy serwer (plik serwer_2_4.c) odbierał kolejne wiadomości po 1 kB. Po odebraniu 1000 takich wiadomości, klient odblokowywał się i dosyłał kolejne 1000 wiadomości po czym blokował się, następnie serwer odbierał 1000 i tak odbywała się dalsza komunikacja do momentu zakończenia procesów przez użytkownika (CTRL+C).
+
+Identyfikacja działania została wykonana za pomocą wypisywania na standardowe wyjście prostych komunikatów o liczniku wysłanych bądź odczytanych wiadomości.
+
+Objawami tego zjawiska po stronie klienta jest blokada powstająca w momencie wysłania wcześniej dużej ilości wiadomości, które wypełniły bufor wysyłania gniazda TCP (TCP send buffer), podczas próby wysłania kolejnej. Blokada trwa do momentu opróżnienia bufora w znacznej części, co się dzieje w momencie, gdy serwer odczyta znaczną część wiadomości. 
+
+Aby uniknąć blokady można wykorzystać mechanizm "poll" na gnieździe TCP (plik client_2_4_poll.c), który przed wysłaniem przez klienta kolejnej wiadomości będzie sprawdzał, czy wysłanie jest możliwe (POLLOUT) i nie zablokuje działania programu. Przy zastosowaniu tego rozwiązania zauważam, że na początku klient nie wysłał tak dużej ilości wiadomości (1700) jak bez użycia tej funkcjonalności, a następnie odstępy między kolejnymi oczekiwaniami klienta na wysłanie kolejnych porcji stabilizowały się ostatecznie na 60 wiadomościach, co przy interwale 1 sekundy na wiadomość przy odbiorze przez serwer daje nam 60 sekund oczekiwania klienta (zamiast 1000).
