@@ -86,18 +86,23 @@ class Server:
         # Authenticate user
         if not Server.authenticate_user(conn):
             print(f'User authentication from {address} failed!')
+            print(f'Connection with {address} closed')
+            conn.close()
             return
 
         # Agree on Data Channel
         if not self.agree_on_data_channel(conn, address):
             print(f'Failed to establish Data Channel connection with {address}')
+            print(f'Connection with {address} closed')
+            conn.close()
             return
 
-        # 3. Start Data Channel Thread
-        # 6. Listen for new commands from user, verify and respond to them
+        # Start Data Channel thread
+        dt = threading.Thread(target=self.handle_data_channel)
+        dt.start()
 
-        print(f'Connection with {address} closed')
-        conn.close()
+        # Listen for new commands from user, verify and respond to them
+        self.handle_commands(conn, address)
 
     @staticmethod
     def authenticate_user(conn: socket.socket) -> bool:
@@ -115,6 +120,7 @@ class Server:
                 Server.send_object_message(conn, {'status': 'OK'})
                 return True
 
+            Server.send_object_message(conn, {'status': 'INV'})  # Invalid credentials
             return False
 
         except Exception as e:
@@ -129,9 +135,9 @@ class Server:
         connection_mode_message = Server.receive_object_message(conn)
         try:
             if connection_mode_message['mode'] == 'p':
-                self.connect_data_channel_passive(conn, address)
+                return self.connect_data_channel_passive(conn)
             elif connection_mode_message['mode'] == 'a':
-                self.connect_data_channel_active(conn, address)
+                return self.connect_data_channel_active(conn)
             else:
                 raise Exception('Client sent invalid Data Channel connection mode argument!')
 
@@ -139,15 +145,38 @@ class Server:
             print(f'Exception occurred during attempt to establish Data Channel connection with {address}\n{e}')
             return None
 
-    def connect_data_channel_passive(self, conn: socket.socket, address: Tuple[str, int]):
+    def connect_data_channel_passive(self, conn: socket.socket) -> socket.socket:
         """
         Performs connection with server Data Channel in passive mode.
         """
+        # Create Data Channel and send port number to client
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as data_channel:
+            data_channel.bind((self.host, 0))  # Get random unused port
+            data_channel.listen()
 
-    def connect_data_channel_active(self, s: socket.socket, address: Tuple[str, int]):
+            port = int(data_channel.getsockname()[1])
+            Server.send_object_message(conn, {'port': port})
+
+            return data_channel
+
+    def connect_data_channel_active(self, s: socket.socket) -> socket.socket:
         """
         Performs connection with server Data Channel in active mode.
         """
+        pass
+
+    def handle_commands(self, conn: socket.socket, address: Tuple[str, int]) -> None:
+        """
+        Receives commands from client, verifies and responds to them.
+        """
+
+
+    def handle_data_channel(self):
+        """
+        Handles Data Channel - sending and receiving files.
+        """
+        pass
+
 
 def main() -> None:
     server = Server()
