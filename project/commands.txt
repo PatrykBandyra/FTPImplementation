@@ -1,0 +1,15 @@
+Commands:
+- cd <directory/path_to_dir> - change remote directory
+- ls - list remote files and directories in current remote directory
+- ls <-r> - list remote files and directories in current remote directory recursively
+- get <file/path_to_file> - download file from current remote directory or path to current local directory
+- get <file/path_to_file> <-t/b> - download file from current remote directory or path to current local directory
+                                   in text or binary mode (default = binary)
+
+- cld <directory/path_to_dir> - change local directory
+- lls - list local files in directory
+- lls <-r> - list local files and directories in current local directory recursively
+- put <file/path_to_file> - upload file to current remote directory
+- put <file/path_to_file> <-t/b> - upload file to current remote directory in text or binary mode (default = binary)
+
+- exit - close client process

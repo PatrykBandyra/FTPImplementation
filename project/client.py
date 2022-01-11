@@ -3,9 +3,13 @@ import threading
 import argparse
 import queue
 import time
-from typing import Tuple, Optional
+from typing import Tuple, Optional, List
 import pickle
 import hashlib
+import os
+import cmd
+from types import SimpleNamespace
+from file_tree_maker import FileTreeMaker
 
 
 class Client:
@@ -24,9 +28,9 @@ class Client:
         # Thread-safe buffer for communicating between threads responsible for handling user input and sending commands
         self.command_buffer = queue.Queue()
 
-        # Thread events
-        self.credentials_entered = threading.Event()
-        self.authenticated = threading.Event()
+        self.command_thread_event = threading.Event()
+        self.input_thread_event = threading.Event()
+        self.exit = False
 
     @staticmethod
     def get_args() -> argparse.Namespace:
@@ -99,12 +103,12 @@ class Client:
             td = threading.Thread(target=self.handle_data_channel, args=(data_s,))
             td.start()
 
-            # Start Console Input Thread
-            t = threading.Thread(target=self.handle_user_input)
+            # Start Command Thread
+            t = threading.Thread(target=self.handle_commands, args=(s,))
             t.start()
 
-            # Listen for new commands from user, verify and send them
-            self.handle_commands()
+            # Listen for user commands
+            self.handle_user_input()
 
     @staticmethod
     def authenticate_user(s: socket.socket) -> bool:
@@ -172,21 +176,149 @@ class Client:
         pass
 
     def handle_data_channel(self, data_s: socket.socket):
-        while True:
-            print('Data channel')
-            time.sleep(3)
+        """
+        Handles data transfer between user and server
+        """
+        while not self.exit:
+            pass
 
     def handle_user_input(self) -> None:
         """
         Receives user commands from console, validates and put them in command buffer.
         """
-        pass
 
-    def handle_commands(self):
+        client = self
+
+        # Wait for user input and validate it
+        class HandleInput(cmd.Cmd):
+            prompt = ''
+            intro = 'Welcome to simple FTP!'
+
+            def __init__(self):
+                super().__init__()
+                self.current_local_dir = os.getcwd()
+                self.current_dir = ''
+
+                self.show_local = True
+
+            def preloop(self) -> None:
+                HandleInput.prompt = f'(local) {self.current_local_dir}> '
+
+            def do_cld(self, *args) -> None:
+                """
+                Change current local directory.
+                Syntax:
+                cld <dir/path_to_dir>
+                """
+                try:
+                    path = args[0]
+                    os.chdir(path)
+                    self.current_local_dir = os.getcwd()
+                    if self.show_local:
+                        HandleInput.prompt = f'(local) {self.current_local_dir}> '
+                except OSError:
+                    print('*** Invalid path to directory or directory name.')
+
+            def do_cd(self, args) -> None:
+                """
+                Change remote working directory.
+                Syntax:
+                cd <dir/path_to_dir>
+                """
+                args = args.split()
+                # Add command to command buffer and wait for response
+                try:
+                    path = args[0]
+                    client.command_buffer.put({'cd': path})
+                    client.command_thread_event.set()
+                    client.command_thread_event.clear()
+                    client.input_thread_event.wait()  # Wait for command thread response
+                    command = client.command_buffer.get()
+                    if 'cd' in command.keys() and command['cd'] != 'ERR':
+                        self.current_dir = command['cd']
+                    else:
+                        raise Exception
+                except Exception:
+                    print('*** Invalid path to directory or directory name.')
+
+            def do_fl(self, args) -> None:
+                """
+                Flip prompt from local to remote or vice versa.
+                """
+                self.show_local = not self.show_local
+                if self.show_local:
+                    HandleInput.prompt = f'(local) {self.current_local_dir}> '
+                else:
+                    # If it's unknown
+                    if self.current_dir == '':
+                        self.do_cd('.')
+                    HandleInput.prompt = f'(remote) {self.current_dir}> '
+
+            def do_lls(self, args):
+                """
+                List local files and directories.
+                Syntax:
+                lls <root> <recursion_level>
+                - root: default = '.'
+                - recursion_level: default = '1' (prints all from current directory);
+                                   if equals to -1 - prints all levels
+                """
+                args = args.split()
+                print(args)
+                try:
+                    # Default - print all from current directory
+                    if len(args) == 0:
+                        namespace = SimpleNamespace(root='.', output='', exclude_folder=[],
+                                                    exclude_name=[], max_level=1)
+                        print(FileTreeMaker().make(namespace))
+
+                    # Print all from given directory
+                    elif len(args) == 1:
+                        namespace = SimpleNamespace(root=args[0], output='', exclude_folder=[],
+                                                    exclude_name=[], max_level=1)
+                        print(FileTreeMaker().make(namespace))
+
+                    # Print from specified directory recursively
+                    elif len(args) == 2:
+                        namespace = SimpleNamespace(root=args[0], output='', exclude_folder=[],
+                                                    exclude_name=[], max_level=int(args[1]))
+                        print(FileTreeMaker().make(namespace))
+
+                    else:
+                        raise Exception
+
+                except Exception:
+                    print('*** Invalid arguments for command "lls".')
+
+        HandleInput().cmdloop()
+
+    def handle_commands(self, s: socket.socket):
         """
         Handles user commands and responses from server.
         """
-        pass
+        while not self.exit:
+            self.command_thread_event.wait()  # Wait for command
+            command = self.command_buffer.get()
+
+            if 'cd' in command.keys():
+                pass
+
+            elif 'ls' in command.keys():
+                pass
+
+            elif 'get' in command.keys():
+                pass
+
+            elif 'put' in command.keys():
+                pass
+
+            elif 'exit' in command.keys():
+                pass
+
+            else:
+                pass
+
+
 
 
 def main() -> None:
