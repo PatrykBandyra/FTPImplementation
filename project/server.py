@@ -67,6 +67,9 @@ class Server:
             return None
 
     def run(self) -> None:
+        """
+        Main loop of server. Server listens for connections and handles each in separate thread.
+        """
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server:
             server.bind((self.host, self.port))
             server.listen(5)
@@ -90,15 +93,20 @@ class Server:
             conn.close()
             return
 
+        print(f'User authentication from {address} successful!')
+
         # Agree on Data Channel
-        if not self.agree_on_data_channel(conn, address):
+        data_conn = self.agree_on_data_channel(conn, address)
+        if not data_conn:
             print(f'Failed to establish Data Channel connection with {address}')
             print(f'Connection with {address} closed')
             conn.close()
             return
 
+        print(f'Data channel established with {address}')
+
         # Start Data Channel thread
-        dt = threading.Thread(target=self.handle_data_channel)
+        dt = threading.Thread(target=self.handle_data_channel, args=(data_conn,))
         dt.start()
 
         # Listen for new commands from user, verify and respond to them
@@ -106,6 +114,9 @@ class Server:
 
     @staticmethod
     def authenticate_user(conn: socket.socket) -> bool:
+        """
+        Handles user authentication by comparing hash received from user with hashes stored in authentication file.
+        """
         user_credentials = Server.receive_object_message(conn)
         if not user_credentials:
             return False
@@ -115,7 +126,7 @@ class Server:
                 auth_data = json.load(f)
 
             # Compare hashes
-            if auth_data[user_credentials['name']] == user_credentials['pass']:
+            if auth_data[user_credentials['name'].decode('utf-8')] == user_credentials['pass']:
                 # Send "OK" status
                 Server.send_object_message(conn, {'status': 'OK'})
                 return True
@@ -124,12 +135,12 @@ class Server:
             return False
 
         except Exception as e:
-            print(f'Exception occurred!\n{e}')
+            print(f'Exception occurred during user authentication!\n{e}')
             return False
 
     def agree_on_data_channel(self, conn: socket.socket, address: Tuple[str, int]) -> Optional[socket.socket]:
         """
-        Negotiates Data Channel
+        Negotiates Data Channel.
         """
         Server.send_object_message(conn, {'mode': 'ready'})
         connection_mode_message = Server.receive_object_message(conn)
@@ -157,7 +168,13 @@ class Server:
             port = int(data_channel.getsockname()[1])
             Server.send_object_message(conn, {'port': port})
 
-            return data_channel
+            connected = False
+
+            while not connected:
+                data_conn, address = data_channel.accept()
+                connected = True
+
+            return data_conn
 
     def connect_data_channel_active(self, s: socket.socket) -> socket.socket:
         """
@@ -169,9 +186,9 @@ class Server:
         """
         Receives commands from client, verifies and responds to them.
         """
+        pass
 
-
-    def handle_data_channel(self):
+    def handle_data_channel(self, data_conn: socket.socket):
         """
         Handles Data Channel - sending and receiving files.
         """

@@ -2,6 +2,7 @@ import socket
 import threading
 import argparse
 import queue
+import time
 from typing import Tuple, Optional
 import pickle
 import hashlib
@@ -89,12 +90,13 @@ class Client:
                 quit(1)
 
             # Successful authentication - agree on Data Channel
-            if not self.agree_on_data_channel(s):
+            data_s = self.agree_on_data_channel(s)
+            if not data_s:
                 print('Could not agree on Data Channel!')
                 quit(1)
 
             # Start Data Channel Thread
-            td = threading.Thread(target=self.handle_data_channel)
+            td = threading.Thread(target=self.handle_data_channel, args=(data_s,))
             td.start()
 
             # Start Console Input Thread
@@ -129,14 +131,14 @@ class Client:
             print(f'Exception occurred during authentication!\n{e}')
             return False
 
-    def agree_on_data_channel(self, s: socket.socket):
+    def agree_on_data_channel(self, s: socket.socket) -> Optional[socket.socket]:
         """
         Negotiates Data Channel
         """
         if self.mode == 'p':
-            self.connect_data_channel_passive(s)
+            return self.connect_data_channel_passive(s)
         else:
-            self.connect_data_channel_active(s)
+            return self.connect_data_channel_active(s)
 
     def connect_data_channel_passive(self, s: socket.socket) -> Optional[socket.socket]:
         """
@@ -157,6 +159,7 @@ class Client:
                 data_s.settimeout(5)
                 data_s.connect((self.server_host, port_number))
 
+                return data_s
 
         except Exception as e:
             print(f'Exception occurred during attempt to establish connection with Data Channel in passive mode!\n{e}')
@@ -166,9 +169,12 @@ class Client:
         """
         Performs connection with server Data Channel in active mode.
         """
-
-    def handle_data_channel(self):
         pass
+
+    def handle_data_channel(self, data_s: socket.socket):
+        while True:
+            print('Data channel')
+            time.sleep(3)
 
     def handle_user_input(self) -> None:
         """
@@ -177,6 +183,9 @@ class Client:
         pass
 
     def handle_commands(self):
+        """
+        Handles user commands and responses from server.
+        """
         pass
 
 
