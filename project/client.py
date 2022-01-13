@@ -231,11 +231,13 @@ class Client:
                     path = args[0]
                     client.command_buffer.put({'cd': path})
                     client.command_thread_event.set()
-                    client.command_thread_event.clear()
                     client.input_thread_event.wait()  # Wait for command thread response
+                    client.input_thread_event.clear()
                     command = client.command_buffer.get()
                     if 'cd' in command.keys() and command['cd'] != 'ERR':
                         self.current_dir = command['cd']
+                        if not self.show_local:
+                            HandleInput.prompt = f'(remote) {self.current_dir}> '
                     else:
                         raise Exception
                 except Exception:
@@ -264,7 +266,6 @@ class Client:
                                    if equals to -1 - prints all levels
                 """
                 args = args.split()
-                print(args)
                 try:
                     # Default - print all from current directory
                     if len(args) == 0:
@@ -290,6 +291,29 @@ class Client:
                 except Exception:
                     print('*** Invalid arguments for command "lls".')
 
+            def do_ls(self, args):
+                """
+                List remote files and directories.
+                Syntax:
+                lls <root> <recursion_level>
+                - root: default = '.'
+                - recursion_level: default = '1' (prints all from current directory);
+                                   if equals to -1 - prints all levels
+                """
+                # Add command to command buffer and wait for response
+                try:
+                    client.command_buffer.put({'ls': args})
+                    client.command_thread_event.set()
+                    client.input_thread_event.wait()  # Wait for command thread response
+                    client.input_thread_event.clear()
+                    command = client.command_buffer.get()
+                    if 'ls' in command.keys() and command['ls'] != 'ERR':
+                        print(command['ls'])
+                    else:
+                        raise Exception
+                except Exception:
+                    print('*** Invalid arguments for command "ls".')
+
         HandleInput().cmdloop()
 
     def handle_commands(self, s: socket.socket):
@@ -298,13 +322,14 @@ class Client:
         """
         while not self.exit:
             self.command_thread_event.wait()  # Wait for command
+            self.command_thread_event.clear()  # Reset flag
             command = self.command_buffer.get()
 
-            if 'cd' in command.keys():
-                pass
-
-            elif 'ls' in command.keys():
-                pass
+            if 'cd' in command.keys() or 'ls' in command.keys():
+                self.send_object_message(s, command)
+                message = self.receive_object_message(s)
+                self.command_buffer.put(message)
+                self.input_thread_event.set()
 
             elif 'get' in command.keys():
                 pass
@@ -317,8 +342,6 @@ class Client:
 
             else:
                 pass
-
-
 
 
 def main() -> None:

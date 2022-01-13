@@ -1,5 +1,11 @@
 Commands:
 - cd <directory/path_to_dir> - change remote directory
+    Possible values:
+    - .. -> go up in directory tree
+    - <absolute_path> -> change path completely
+    - <dir_name_in_current_dir> -> go down in directory tree
+    - . -> return current dir
+
 - ls - list remote files and directories in current remote directory
 - ls <-r> - list remote files and directories in current remote directory recursively
 - get <file/path_to_file> - download file from current remote directory or path to current local directory

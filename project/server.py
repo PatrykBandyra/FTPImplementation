@@ -5,6 +5,9 @@ import queue
 from typing import Tuple, Optional
 import pickle
 import json
+import os
+from types import SimpleNamespace
+from file_tree_maker import FileTreeMaker
 
 
 class Server:
@@ -186,7 +189,89 @@ class Server:
         """
         Receives commands from client, verifies and responds to them.
         """
-        pass
+        current_dir = os.getcwd()  # Only to init
+        while True:
+            command = self.receive_object_message(conn)
+
+            try:
+                if 'cd' in command.keys():
+                    # Change current working directory if path is valid
+                    try:
+                        # Go up in directory tree
+                        if command['cd'].strip() == '..':
+                            current_dir = os.path.dirname(current_dir)
+
+                        # Return current directory
+                        elif command['cd'].strip() == '.':
+                            pass
+
+                        # Go down directory tree or change absolute path
+                        elif os.path.isdir(os.path.join(current_dir, command['cd'])):
+                            if os.path.isabs(command['cd']):
+                                current_dir = command['cd']
+                            else:
+                                current_dir = os.path.join(current_dir, command['cd'])
+
+                        else:
+                            raise Exception('Invalid command!')
+
+                        self.send_object_message(conn, {'cd': current_dir})  # Send to client updated path
+
+                    except Exception as e:
+                        print(f'Exception occurred in command channel of {address}\n{e}')
+                        self.send_object_message(conn, {'cd': 'ERR'})
+
+                elif 'ls' in command.keys():
+
+                    try:
+                        args = command['ls'].split()
+                        print(args)
+
+                        # Default - print all from current directory
+                        if len(args) == 0:
+                            namespace = SimpleNamespace(root=current_dir, output='', exclude_folder=[],
+                                                        exclude_name=[], max_level=1)
+                            tree_str = FileTreeMaker().make(namespace)
+
+                        # Print all from given directory
+                        elif len(args) == 1:
+                            r = args[0].strip()
+                            if r == '.':
+                                r = current_dir
+                            namespace = SimpleNamespace(root=r, output='', exclude_folder=[],
+                                                        exclude_name=[], max_level=1)
+                            tree_str = FileTreeMaker().make(namespace)
+
+                        # Print from specified directory recursively
+                        elif len(args) == 2:
+                            r = args[0].strip()
+                            if r == '.':
+                                r = current_dir
+                            namespace = SimpleNamespace(root=r, output='', exclude_folder=[],
+                                                        exclude_name=[], max_level=int(args[1]))
+                            tree_str = FileTreeMaker().make(namespace)
+
+                        else:
+                            raise Exception
+
+                        self.send_object_message(conn, {'ls': tree_str})
+
+                    except Exception as e:
+                        print(f'Exception occurred in command channel of {address}\n{e}')
+                        self.send_object_message(conn, {'ls': 'ERR'})
+
+
+                elif 'get' in command.keys():
+                    pass
+                else:
+                    print(f'Received invalid command from {address}')
+
+            except Exception as e:
+                print(f'Exception occurred in command channel of {address}\n{e}')
+                try:
+                    self.send_object_message(conn, {'ERR': e})
+                except Exception as e:
+                    print(f'Exception occurred in command channel of {address}\n{e}')
 
     def handle_data_channel(self, data_conn: socket.socket):
         """
