@@ -30,6 +30,7 @@ class Client:
 
         self.command_thread_event = threading.Event()
         self.input_thread_event = threading.Event()
+        self.data_thread_event = threading.Event()
         self.exit = False
 
     @staticmethod
