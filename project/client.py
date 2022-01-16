@@ -42,7 +42,7 @@ class Client:
                             help='Address of server e.g. "127.0.0.1"')
         parser.add_argument('-p', '--port', type=int, default=65000, metavar='',
                             help='Port number of server Command Channel e.g. "65000"')
-        parser.add_argument('-m', '--mode', type=str, default='a', choices=['a', 'p'], metavar='',
+        parser.add_argument('-m', '--mode', type=str, default='p', choices=['a', 'p'], metavar='',
                             help='Mode of establishing connection with server')
         return parser.parse_args()
 
