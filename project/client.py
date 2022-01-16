@@ -2,12 +2,13 @@ import socket
 import threading
 import argparse
 import queue
-import time
+# import time
 from typing import Tuple, Optional, List
 import pickle
 import hashlib
 import os
 import cmd
+import ssl
 from types import SimpleNamespace
 from file_tree_maker import FileTreeMaker
 
@@ -25,7 +26,8 @@ class Client:
         self.server_port = args.port
         self.mode = args.mode
 
-        # Thread-safe buffer for communicating between threads responsible for handling user input and sending commands
+        # Thread-safe buffer for communicating between threads
+        # responsible for handling user input and sending commands
         self.command_buffer = queue.Queue()
 
         self.command_thread_event = threading.Event()
@@ -80,14 +82,18 @@ class Client:
 
     def run(self) -> None:
 
-        # TODO: tls wrapper
+        context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+        context.load_verify_locations('cert.pem')
+
         # Establish connection with command channel
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        try:
+            sock = socket.create_connection((self.server_host, self.server_port))
+        except socket.error as e:
+            print(f'Connection failed!\n{e}')
+
+        with context.wrap_socket(sock, server_side=False, server_hostname="projekt.psi") as s:
+            print(f'Connected using {s.version()}\n')
             s.settimeout(5)
-            try:
-                s.connect((self.server_host, self.server_port))
-            except socket.error as e:
-                print(f'Connection failed!\n{e}')
 
             # Authenticate user
             if not Client.authenticate_user(s):
@@ -99,6 +105,8 @@ class Client:
             if not data_s:
                 print('Could not agree on Data Channel!')
                 quit(1)
+
+            print(f'Using {s.version()}\n')
 
             # Start Data Channel Thread
             td = threading.Thread(target=self.handle_data_channel, args=(data_s,))

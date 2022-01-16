@@ -1,4 +1,5 @@
 import socket
+import ssl
 import threading
 import argparse
 import queue
@@ -73,17 +74,21 @@ class Server:
         """
         Main loop of server. Server listens for connections and handles each in separate thread.
         """
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server:
-            server.bind((self.host, self.port))
-            server.listen(5)
-            # TODO: tls wrapper
-            print(f'Server listening on {self.host}:{self.port}')
+        context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        context.load_cert_chain('cert.pem', 'key.pem')
 
-            while True:
-                conn, address = server.accept()
-                print(f'Connection from {address}')
-                t = threading.Thread(target=self.handle_connection, args=(conn, address))
-                t.start()
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server_sock:
+            server_sock.bind((self.host, self.port))
+            server_sock.listen(5)
+
+            with context.wrap_socket(server_sock, server_side=True) as server:
+                print(f'Server listening on {self.host}:{self.port}')
+
+                while True:
+                    conn, address = server.accept()
+                    print(f'Connection from {address}')
+                    t = threading.Thread(target=self.handle_connection, args=(conn, address))
+                    t.start()
 
     def handle_connection(self, conn: socket.socket, address: Tuple[str, int]) -> None:
         """
