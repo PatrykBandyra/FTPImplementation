@@ -42,7 +42,7 @@ class Client:
                             help='Address of server e.g. "127.0.0.1"')
         parser.add_argument('-p', '--port', type=int, default=65000, metavar='',
                             help='Port number of server Command Channel e.g. "65000"')
-        parser.add_argument('-m', '--mode', type=str, default='p', choices=['a', 'p'], metavar='',
+        parser.add_argument('-m', '--mode', type=str, default='a', choices=['a', 'p'], metavar='',
                             help='Mode of establishing connection with server')
         return parser.parse_args()
 
@@ -83,7 +83,7 @@ class Client:
     def run(self) -> None:
 
         context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
-        context.load_verify_locations('cert.pem')
+        context.load_verify_locations('/home/erykens/HDD/STUDIA/SEM 5/psi/project/cert.pem')
 
         # Establish connection with command channel
         try:
@@ -93,7 +93,6 @@ class Client:
             quit(1)
 
         with context.wrap_socket(sock, server_side=False, server_hostname="projekt.psi") as s:
-            print(f'Connected using {s.version()}\n')
             s.settimeout(5)
 
             # Authenticate user
@@ -107,7 +106,7 @@ class Client:
                 print('Could not agree on Data Channel!')
                 quit(1)
 
-            print(f'Using {s.version()}\n')
+            print(f'Connection successful using {s.version()}')
 
             # Start Data Channel Thread
             td = threading.Thread(target=self.handle_data_channel, args=(data_s,))
@@ -183,7 +182,31 @@ class Client:
         """
         Performs connection with server Data Channel in active mode.
         """
-        pass
+        try:
+            message = Client.receive_object_message(s)
+            if not message['mode'] == 'ready':
+                return None
+
+            Client.send_object_message(s, {'mode': 'a'})
+
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as data_channel:
+                data_channel.bind((s.getsockname()[0], 0))  # Get random unused port
+                data_channel.listen()
+
+                port = int(data_channel.getsockname()[1])
+                Client.send_object_message(s, {'port': port})
+
+                connected = False
+
+                while not connected:
+                    data_conn, address = data_channel.accept()
+                    connected = True
+
+            return data_conn
+
+        except Exception as e:
+            print(f'Exception occurred during attempt to establish connection with Data Channel in active mode!\n{e}')
+            return None
 
     def handle_data_channel(self, data_s: socket.socket):
         """

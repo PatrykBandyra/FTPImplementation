@@ -188,7 +188,23 @@ class Server:
         """
         Performs connection with server Data Channel in active mode.
         """
-        pass
+        try:
+            message = Server.receive_object_message(s)
+            print(message['port'])
+            if not message['port']:
+                return None
+
+            # Connect to a port specified by client
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as data_s:
+                data_s.settimeout(5)
+                addr = s.getsockname()[0]
+                data_s.connect((addr, message['port']))
+
+                return data_s
+
+        except Exception as e:
+            print(f'Exception occurred during attempt to establish connection with Data Channel in active mode!\n{e}')
+            return None
 
     def handle_commands(self, conn: socket.socket, address: Tuple[str, int]) -> None:
         """
