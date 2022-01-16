@@ -90,6 +90,7 @@ class Client:
             sock = socket.create_connection((self.server_host, self.server_port))
         except socket.error as e:
             print(f'Connection failed!\n{e}')
+            quit(1)
 
         with context.wrap_socket(sock, server_side=False, server_hostname="projekt.psi") as s:
             print(f'Connected using {s.version()}\n')
