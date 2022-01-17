@@ -83,7 +83,7 @@ class Client:
     def run(self) -> None:
 
         context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
-        context.load_verify_locations('/home/erykens/HDD/STUDIA/SEM 5/psi/project/cert.pem')
+        context.load_verify_locations('cert.pem')
 
         # Establish connection with command channel
         try:
@@ -151,7 +151,7 @@ class Client:
         if self.mode == 'p':
             return self.connect_data_channel_passive(s)
         else:
-            return self.connect_data_channel_active(s)
+            return Client.connect_data_channel_active(s)
 
     def connect_data_channel_passive(self, s: socket.socket) -> Optional[socket.socket]:
         """
@@ -178,7 +178,8 @@ class Client:
             print(f'Exception occurred during attempt to establish connection with Data Channel in passive mode!\n{e}')
             return None
 
-    def connect_data_channel_active(self, s: socket.socket):
+    @staticmethod
+    def connect_data_channel_active(s: socket.socket) -> Optional[socket.socket]:
         """
         Performs connection with server Data Channel in active mode.
         """
@@ -289,7 +290,7 @@ class Client:
                         self.do_cd('.')
                     HandleInput.prompt = f'(remote) {self.current_dir}> '
 
-            def do_lls(self, args):
+            def do_lls(self, args) -> None:
                 """
                 List local files and directories.
                 Syntax:

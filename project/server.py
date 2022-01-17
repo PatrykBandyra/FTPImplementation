@@ -156,7 +156,7 @@ class Server:
             if connection_mode_message['mode'] == 'p':
                 return self.connect_data_channel_passive(conn)
             elif connection_mode_message['mode'] == 'a':
-                return self.connect_data_channel_active(conn)
+                return Server.connect_data_channel_active(conn)
             else:
                 raise Exception('Client sent invalid Data Channel connection mode argument!')
 
@@ -184,7 +184,8 @@ class Server:
 
             return data_conn
 
-    def connect_data_channel_active(self, s: socket.socket) -> socket.socket:
+    @staticmethod
+    def connect_data_channel_active(s: socket.socket) -> Optional[socket.socket]:
         """
         Performs connection with server Data Channel in active mode.
         """
