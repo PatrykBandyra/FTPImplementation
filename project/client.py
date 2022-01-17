@@ -3,6 +3,7 @@ import threading
 import argparse
 import queue
 # import time
+import time
 from typing import Tuple, Optional, List
 import pickle
 import hashlib
@@ -34,6 +35,8 @@ class Client:
         self.input_thread_event = threading.Event()
         self.data_thread_event = threading.Event()
         self.exit = False
+
+        self.input_handler = None
 
     @staticmethod
     def get_args() -> argparse.Namespace:
@@ -216,6 +219,11 @@ class Client:
         while not self.exit:
             pass
 
+        # App is about to shut down - disconnect
+        data_s.close()
+        self.command_thread_event.set()
+        print('Data Channel closed.')
+
     def handle_user_input(self) -> None:
         """
         Receives user commands from console, validates and put them in command buffer.
@@ -234,6 +242,8 @@ class Client:
                 self.current_dir = ''
 
                 self.show_local = True
+
+                self.emergency_exit = False
 
             def preloop(self) -> None:
                 HandleInput.prompt = f'(local) {self.current_local_dir}> '
@@ -272,10 +282,13 @@ class Client:
                         self.current_dir = command['cd']
                         if not self.show_local:
                             HandleInput.prompt = f'(remote) {self.current_dir}> '
+                    elif 'ERR' in command.keys():
+                        self.emergency_exit = True
+                        print('Closing app...')
                     else:
-                        raise Exception
-                except Exception:
-                    print('*** Invalid path to directory or directory name.')
+                        print('*** Invalid path to directory or directory name.')
+                except Exception as e:
+                    print(f'Exception occurred during handling "cd" command\n{e}')
 
             def do_fl(self, args) -> None:
                 """
@@ -325,7 +338,7 @@ class Client:
                 except Exception:
                     print('*** Invalid arguments for command "lls".')
 
-            def do_ls(self, args):
+            def do_ls(self, args) -> None:
                 """
                 List remote files and directories.
                 Syntax:
@@ -343,12 +356,33 @@ class Client:
                     command = client.command_buffer.get()
                     if 'ls' in command.keys() and command['ls'] != 'ERR':
                         print(command['ls'])
+                    elif 'ERR' in command.keys():
+                        self.emergency_exit = True
+                        print('Closing app...')
                     else:
-                        raise Exception
-                except Exception:
-                    print('*** Invalid arguments for command "ls".')
+                        print('*** Invalid arguments for command "ls".')
+                except Exception as e:
+                    print(f'Exception occurred during handling "ls" command\n{e}')
 
-        HandleInput().cmdloop()
+            def do_exit(self, args) -> bool:
+                """
+                Exit the application.
+                """
+                # Add command to command buffer and wait for response
+                try:
+                    client.command_buffer.put({'exit': ''})
+                    client.command_thread_event.set()
+                    self.emergency_exit = True
+                    print('Closing app...')
+                    return True
+                except Exception:
+                    print('*** Invalid arguments for command "exit".')
+
+            def postcmd(self, stop: bool, line: str) -> bool:
+                return True if self.emergency_exit else False
+
+        client.input_handler = HandleInput()
+        client.input_handler.cmdloop()
 
     def handle_commands(self, s: socket.socket):
         """
@@ -360,10 +394,16 @@ class Client:
             command = self.command_buffer.get()
 
             if 'cd' in command.keys() or 'ls' in command.keys():
-                self.send_object_message(s, command)
-                message = self.receive_object_message(s)
-                self.command_buffer.put(message)
-                self.input_thread_event.set()
+                try:
+                    self.send_object_message(s, command)
+                    message = self.receive_object_message(s)
+                    self.command_buffer.put(message)
+                    self.input_thread_event.set()
+                except Exception as e:
+                    print(f'Exception occurred in Command Channel while handling "cd" or "ls" command\n{e}')
+                    self.exit = True
+                    self.command_buffer.put({'ERR': ''})
+                    self.input_thread_event.set()
 
             elif 'get' in command.keys():
                 pass
@@ -373,9 +413,27 @@ class Client:
 
             elif 'exit' in command.keys():
                 pass
+                # First close Data Channel
+                self.exit = True
+                self.command_thread_event.wait()  # Sleep until Data Channel is not closed
+                self.command_thread_event.clear()  # Reset flag
+
+                # Then close Command Channel
+                s.close()
+                print('Command Channel closed.')
+
+                # Finally, quit the app
+                quit(0)
 
             else:
-                pass
+                print(f'*** Received invalid command: {command}')
+
+        # Exit app
+        self.command_thread_event.wait()  # Sleep until Data Channel is not closed
+        self.command_thread_event.clear()  # Reset flag
+        s.close()
+        print('Command Channel closed.')
+        quit(0)
 
 
 def main() -> None:

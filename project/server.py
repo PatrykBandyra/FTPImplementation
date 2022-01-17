@@ -215,6 +215,11 @@ class Server:
         while True:
             command = self.receive_object_message(conn)
 
+            if not command:
+                conn.close()
+                print(f'Connection with {address} closed!')
+                break
+
             try:
                 if 'cd' in command.keys():
                     # Change current working directory if path is valid
@@ -247,7 +252,6 @@ class Server:
 
                     try:
                         args = command['ls'].split()
-                        print(args)
 
                         # Default - print all from current directory
                         if len(args) == 0:
@@ -281,7 +285,6 @@ class Server:
                     except Exception as e:
                         print(f'Exception occurred in command channel of {address}\n{e}')
                         self.send_object_message(conn, {'ls': 'ERR'})
-
 
                 elif 'get' in command.keys():
                     pass
