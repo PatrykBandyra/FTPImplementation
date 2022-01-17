@@ -111,14 +111,19 @@ class Server:
             conn.close()
             return
 
-        print(f'Data channel established with {address}')
+        print(f'Data channel established with {address} on port {conn.getsockname()[1]}')
+
+        communication_buffer = queue.Queue()
+        data_channel_event = threading.Event()
+        command_channel_event = threading.Event()
 
         # Start Data Channel thread
-        dt = threading.Thread(target=self.handle_data_channel, args=(data_conn,))
+        dt = threading.Thread(target=self.handle_data_channel, args=(data_conn, communication_buffer,
+                                                                     data_channel_event, command_channel_event))
         dt.start()
 
         # Listen for new commands from user, verify and respond to them
-        self.handle_commands(conn, address)
+        self.handle_commands(conn, address, communication_buffer, data_channel_event, command_channel_event)
 
     @staticmethod
     def authenticate_user(conn: socket.socket) -> bool:
@@ -207,7 +212,8 @@ class Server:
             print(f'Exception occurred during attempt to establish connection with Data Channel in active mode!\n{e}')
             return None
 
-    def handle_commands(self, conn: socket.socket, address: Tuple[str, int]) -> None:
+    def handle_commands(self, conn: socket.socket, address: Tuple[str, int], communication_buffer: queue.Queue,
+                        data_channel_event: threading.Event, command_channel_event: threading.Event) -> None:
         """
         Receives commands from client, verifies and responds to them.
         """
@@ -218,6 +224,8 @@ class Server:
             if not command:
                 conn.close()
                 print(f'Connection with {address} closed!')
+                communication_buffer.put({'close': ''})  # Make Data Channel close its connection
+                data_channel_event.set()
                 break
 
             try:
@@ -298,11 +306,24 @@ class Server:
                 except Exception as e:
                     print(f'Exception occurred in command channel of {address}\n{e}')
 
-    def handle_data_channel(self, data_conn: socket.socket):
+    def handle_data_channel(self, data_conn: socket.socket, communication_buffer: queue.Queue,
+                            data_channel_event: threading.Event, command_channel_event: threading.Event) -> None:
         """
         Handles Data Channel - sending and receiving files.
         """
-        pass
+        while True:
+            data_channel_event.wait()  # Wait for task
+            data_channel_event.clear()
+
+            command = communication_buffer.get()
+
+            if 'close' in command.keys():
+                print(f'Data Channel with {data_conn.getsockname()} closed.')
+                data_conn.close()
+                break
+            else:
+                pass
+                # TODO: upload/download of files in different modes
 
 
 def main() -> None:
