@@ -176,7 +176,7 @@ class Server:
         # Create Data Channel and send port number to client
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as data_channel:
             data_channel.bind((self.host, 0))  # Get random unused port
-            data_channel.listen()
+            data_channel.listen(1)
 
             port = int(data_channel.getsockname()[1])
             Server.send_object_message(conn, {'port': port})
@@ -295,7 +295,31 @@ class Server:
                         self.send_object_message(conn, {'ls': 'ERR'})
 
                 elif 'get' in command.keys():
+                    try:
+                        # Validate path of received file
+                        filepath = command['get']
+
+                        if os.path.isfile(os.path.join(current_dir, filepath)):
+                            if not os.path.isabs(filepath):
+                                filepath = os.path.join(current_dir, filepath)
+
+                            # Init upload
+                            communication_buffer.put({'get': filepath})
+                            self.send_object_message(conn, {'get': 'OK'})
+                            message = self.receive_object_message(conn)  # Wait for response message
+                            if message['get'] == 'ready':
+                                data_channel_event.set()
+
+                        else:
+                            self.send_object_message(conn, {'get': 'ERR'})
+
+                    except Exception as e:
+                        print(f'Exception occurred in command channel of {address}\n{e}')
+                        self.send_object_message(conn, {'get': 'ERR'})
+
+                elif 'put' in command.keys():
                     pass
+
                 else:
                     print(f'Received invalid command from {address}')
 
@@ -321,9 +345,14 @@ class Server:
                 print(f'Data Channel with {data_conn.getsockname()} closed.')
                 data_conn.close()
                 break
-            else:
-                pass
-                # TODO: upload/download of files in different modes
+            elif 'get' in command:  # File upload
+                # TODO: mode checking
+                with open(command['get'], 'rb') as f:
+
+                    data = f.read()
+                    filesize = len(data)
+                    data_header = bytes(f'{filesize:<{Server.HEADER_LENGTH}}', 'utf-8')
+                    data_conn.sendall(data_header + data)
 
 
 def main() -> None:

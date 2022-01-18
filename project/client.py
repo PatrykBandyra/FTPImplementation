@@ -30,6 +30,8 @@ class Client:
         # Thread-safe buffer for communicating between threads
         # responsible for handling user input and sending commands
         self.command_buffer = queue.Queue()
+        # Responsible for communication between Data Channel and Command Channel
+        self.command_data_communication_buffer = queue.Queue()
 
         self.command_thread_event = threading.Event()
         self.input_thread_event = threading.Event()
@@ -195,7 +197,7 @@ class Client:
 
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as data_channel:
                 data_channel.bind((s.getsockname()[0], 0))  # Get random unused port
-                data_channel.listen()
+                data_channel.listen(1)
 
                 port = int(data_channel.getsockname()[1])
                 Client.send_object_message(s, {'port': port})
@@ -211,18 +213,6 @@ class Client:
         except Exception as e:
             print(f'Exception occurred during attempt to establish connection with Data Channel in active mode!\n{e}')
             return None
-
-    def handle_data_channel(self, data_s: socket.socket):
-        """
-        Handles data transfer between user and server
-        """
-        while not self.exit:
-            pass
-
-        # App is about to shut down - disconnect
-        data_s.close()
-        self.command_thread_event.set()
-        print('Data Channel closed.')
 
     def handle_user_input(self) -> None:
         """
@@ -289,6 +279,31 @@ class Client:
                         print('*** Invalid path to directory or directory name.')
                 except Exception as e:
                     print(f'Exception occurred during handling "cd" command\n{e}')
+
+            def do_get(self, args) -> None:
+                """
+                Downloads file from specified path.
+                Syntax:
+                get <path>
+                """
+                args = args.split()
+                # Add command to command buffer and wait for response
+                try:
+                    path = args[0]
+                    client.command_buffer.put({'get': path})
+                    client.command_thread_event.set()
+                    client.input_thread_event.wait()  # Wait for command thread response
+                    client.input_thread_event.clear()
+                    command = client.command_buffer.get()
+                    if 'get' in command.keys() and command['get'] != 'ERR':
+                        print('Downloading...')
+                    elif 'ERR' in command.keys():  # No connection
+                        self.emergency_exit = True
+                        print('Closing app...')
+                    else:
+                        print('*** Invalid file path.')
+                except Exception as e:
+                    print(f'Exception occurred during handling "get" command\n{e}')
 
             def do_fl(self, args) -> None:
                 """
@@ -357,6 +372,8 @@ class Client:
                     if 'ls' in command.keys() and command['ls'] != 'ERR':
                         print(command['ls'])
                     elif 'ERR' in command.keys():
+                        client.command_buffer.put({'exit': ''})
+                        client.command_thread_event.set()
                         self.emergency_exit = True
                         print('Closing app...')
                     else:
@@ -406,15 +423,37 @@ class Client:
                     self.input_thread_event.set()
 
             elif 'get' in command.keys():
-                pass
+                # TODO: mode checking
+
+                try:
+                    # Check if file with specific name exists locally
+                    if os.path.isfile(os.path.join(os.getcwd(), command['get'])):
+                        raise Exception('File with such path already exists on local machine')
+
+                    self.send_object_message(s, command)
+                    message = self.receive_object_message(s)
+                    self.command_buffer.put(message)
+                    self.input_thread_event.set()
+                    if message['get'] == 'OK':
+                        # Initialize download
+                        self.command_data_communication_buffer.put({'get': command['get']})
+                        self.data_thread_event.set()
+                        self.command_thread_event.wait()
+                        self.command_thread_event.clear()
+                        self.send_object_message(s, {'get': 'ready'})
+                except Exception as e:
+                    print(f'Exception occurred in Command Channel while handling "get" command\n{e}')
+                    self.exit = True
+                    self.command_buffer.put({'ERR': ''})
+                    self.input_thread_event.set()
 
             elif 'put' in command.keys():
                 pass
 
             elif 'exit' in command.keys():
-                pass
                 # First close Data Channel
                 self.exit = True
+                self.data_thread_event.set()
                 self.command_thread_event.wait()  # Sleep until Data Channel is not closed
                 self.command_thread_event.clear()  # Reset flag
 
@@ -434,6 +473,45 @@ class Client:
         s.close()
         print('Command Channel closed.')
         quit(0)
+
+    def handle_data_channel(self, data_s: socket.socket) -> None:
+        """
+        Handles data transfer between user and server
+        """
+        while True:
+            self.data_thread_event.wait()
+            self.data_thread_event.clear()
+            if self.exit:
+                # App is about to shut down - disconnect
+                data_s.close()
+                self.command_thread_event.set()
+                print('Data Channel closed.')
+                break
+
+            command = self.command_data_communication_buffer.get()
+            if 'get' in command.keys():
+                with open(command['get'], 'wb') as f:
+                    self.command_thread_event.set()  # Inform Command Channel about readiness
+                    try:
+                        data_header = data_s.recv(Client.HEADER_LENGTH)
+                        if not data_header:
+                            print('Failed to receive data header!')
+                            break
+
+                        data_length = int(data_header.decode('utf-8').strip())
+                        data = data_s.recv(data_length)
+
+                        if not data:
+                            print('Failed to receive data!')
+                            break
+
+                        f.write(data)
+
+                        print('File downloaded successfully!')
+
+                    except Exception as e:
+                        print(f'Exception occurred during receiving data!\n{e}')
+                        return None
 
 
 def main() -> None:
