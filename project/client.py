@@ -1,3 +1,4 @@
+import random
 import socket
 import threading
 import argparse
@@ -15,6 +16,7 @@ from Crypto.Cipher import AES
 import string
 import secrets
 import base64
+import platform
 
 
 class Client:
@@ -320,14 +322,27 @@ class Client:
 
             def do_get(self, args) -> None:
                 """
-                Downloads file from specified path.
+                Downloads file from specified path. Default mode = binary.
                 Syntax:
-                get <path>
+                get <path> <mode>
+                mode = -b | -t
                 """
                 args = args.split()
                 # Add command to command buffer and wait for response
+                client.is_text_mode=False
                 try:
-                    path = args[0]
+                    for arg in args:
+                        if(arg=="-t" or arg=="-T"):
+                            client.is_text_mode=True
+
+                    i=0
+                    while(i<len(args) and len(args[i]) and args[i][0]=='-'):
+                        i+=1
+                    if(i==len(args)):
+                        print("no file specified")
+                        return
+                    path = args[i]
+
                     client.command_buffer.put({'get': path})
                     client.command_thread_event.set()
                     client.input_thread_event.wait()  # Wait for command thread response
@@ -465,9 +480,16 @@ class Client:
                 # TODO: mode checking
 
                 try:
+                    new_filename = ''
                     # Check if file with specific name exists locally
                     if os.path.isfile(os.path.join(os.getcwd(), command['get'])):
-                        raise Exception('File with such path already exists on local machine')
+                        print('File with such path already exists on local machine')
+                        # Add random extension to filename in such case
+                        path, filename = os.path.split(command['get'])
+                        filename, file_type = os.path.splitext(filename)
+                        extension = ''.join([str(random.randint(0, 9)) for _ in range(10)])
+                        new_filename = f'{filename}_{extension}{file_type}'
+                        print(f'File will be saved as: {new_filename}')
 
                     self.send_object_message(s, command)
                     message = self.receive_object_message(s)
@@ -475,7 +497,7 @@ class Client:
                     self.input_thread_event.set()
                     if message['get'] == 'OK':
                         # Initialize download
-                        self.command_data_communication_buffer.put({'get': command['get']})
+                        self.command_data_communication_buffer.put({'get': [command['get'], new_filename]})
                         self.data_thread_event.set()
                         self.command_thread_event.wait()
                         self.command_thread_event.clear()
@@ -530,7 +552,8 @@ class Client:
 
             command = self.command_data_communication_buffer.get()
             if 'get' in command.keys():
-                with open(command['get'], 'wb') as f:
+                f_name = command['get'][0] if command['get'][1] == '' else command['get'][1]
+                with open(f_name, 'wb') as f:
                     self.command_thread_event.set()  # Inform Command Channel about readiness
                     try:
                         data_header = data_s.recv(Client.HEADER_LENGTH)
@@ -547,9 +570,14 @@ class Client:
 
                         data = Client.decrypt(self, data)
 
-                        f.write(data)
+                        if(self.is_text_mode):
+                            data = data.replace(b"/n/r", b"/n")
+                            if(platform.system()=="Windows"):
+                                data = data.replace(b"/n", b"/n/r")
+                            elif(platform.system()!="Linux"):
+                                print("detected an unsupported sustem: "+platform.system()+", assuming Linux-like behavior")
 
-                        print('File downloaded successfully!')
+                        f.write(data)
 
                     except Exception as e:
                         print(f'Exception occurred during receiving data!\n{e}')
