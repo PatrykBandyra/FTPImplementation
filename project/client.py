@@ -11,6 +11,7 @@ import cmd
 import ssl
 from types import SimpleNamespace
 from file_tree_maker import FileTreeMaker
+import platform
 
 
 class Client:
@@ -290,8 +291,20 @@ class Client:
                 """
                 args = args.split()
                 # Add command to command buffer and wait for response
+                client.is_text_mode=False
                 try:
-                    path = args[0]
+                    for arg in args:
+                        if(arg=="-t" or arg=="-T"):
+                            client.is_text_mode=True
+
+                    i=0
+                    while(i<len(args) and len(args[i]) and args[i][0]=='-'):
+                        i+=1
+                    if(i==len(args)):
+                        print("no file specified")
+                        return
+                    path = args[i]
+
                     client.command_buffer.put({'get': path})
                     client.command_thread_event.set()
                     client.input_thread_event.wait()  # Wait for command thread response
@@ -508,6 +521,13 @@ class Client:
                         if not data:
                             print('Failed to receive data!')
                             break
+
+                        if(self.is_text_mode):
+                            data = data.replace(b"/n/r", b"/n")
+                            if(platform.system()=="Windows"):
+                                data = data.replace(b"/n", b"/n/r")
+                            elif(platform.system()!="Linux"):
+                                print("detected an unsupported sustem: "+platform.system()+", assuming Linux-like behavior")
 
                         f.write(data)
 
