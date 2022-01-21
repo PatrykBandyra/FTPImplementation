@@ -422,7 +422,8 @@ class Server:
                         if not data:
                             print(f'Failed to receive data! Connection: {data_conn.getsockname()}')
                             break
-
+                        
+                        data = Server.decrypt(self, data)
                         f.write(data)
 
                     except Exception as e:

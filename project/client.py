@@ -17,7 +17,6 @@ from Crypto.Cipher import AES
 import string
 import secrets
 import base64
-import platform
 
 
 class Client:
@@ -639,6 +638,7 @@ class Client:
                 with open(command['put'], 'rb') as f:
 
                     data = f.read()
+                    data = Client.encrypt(self, data)
                     filesize = len(data)
                     data_header = bytes(f'{filesize:<{Client.HEADER_LENGTH}}', 'utf-8')
                     data_s.sendall(data_header + data)
