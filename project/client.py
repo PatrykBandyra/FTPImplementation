@@ -368,13 +368,25 @@ class Client:
                 """
                 try:
                     args = args.split()
-                    path = args[0]
+
+                    for arg in args:
+                        if arg == '-t' or arg == '-T':
+                            client.is_text_mode = True
+
+                    i = 0
+                    while i < len(args) and len(args[i]) and args[i][0] == '-':
+                        i += 1
+                    if i == len(args):
+                        print('*** No file specified')
+                        return
+                    path = args[i]
+
                     # Check if specified file exists
                     if not os.path.isfile(path):
                         print('*** Invalid file path.')
                         return
                     # Add command to command buffer and wait for response
-                    client.command_buffer.put({'put': path})
+                    client.command_buffer.put({'put': path, 'is_text_mode': client.is_text_mode})
                     client.command_thread_event.set()
                     client.input_thread_event.wait()  # Wait for command thread response
                     client.input_thread_event.clear()

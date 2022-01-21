@@ -5,6 +5,7 @@ import argparse
 import queue
 from typing import Tuple, Optional
 import pickle
+import platform
 import json
 import os
 import random
@@ -343,6 +344,7 @@ class Server:
                         filepath = command['put']  # Local filepath
                         _, filename = os.path.split(filepath)
                         filepath = os.path.join(current_dir, filename)  # Filepath for file to be uploaded to
+                        is_text_mode = command["is_text_mode"]
 
                         # Check if generated filepath already exists
                         info = ''
@@ -358,7 +360,7 @@ class Server:
                                    f'File will be uploaded as: {new_filename}'
 
                         # Init download (from client to server)
-                        communication_buffer.put({'put': filepath})
+                        communication_buffer.put({'put': filepath, 'is_text_mode': is_text_mode})
                         self.send_object_message(conn, {'put': ['OK', info]})
                         data_channel_event.set()
                         command_channel_event.wait()  # Wait for Data Channel info
@@ -424,6 +426,15 @@ class Server:
                             break
                         
                         data = Server.decrypt(self, data)
+
+                        if command['is_text_mode']:
+                            data = data.replace(b"/n/r", b"/n")
+                            if platform.system() == "Windows":
+                                data = data.replace(b"/n", b"/n/r")
+                            elif platform.system() != "Linux":
+                                print(f'detected an unsupported system: {platform.system()}, '
+                                      f'assuming Linux-like behavior')
+
                         f.write(data)
 
                     except Exception as e:
