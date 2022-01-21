@@ -1,3 +1,4 @@
+import random
 import socket
 import threading
 import argparse
@@ -429,9 +430,16 @@ class Client:
                 # TODO: mode checking
 
                 try:
+                    new_filename = ''
                     # Check if file with specific name exists locally
                     if os.path.isfile(os.path.join(os.getcwd(), command['get'])):
-                        raise Exception('File with such path already exists on local machine')
+                        print('File with such path already exists on local machine')
+                        # Add random extension to filename in such case
+                        path, filename = os.path.split(command['get'])
+                        filename, file_type = os.path.splitext(filename)
+                        extension = ''.join([str(random.randint(0, 9)) for _ in range(10)])
+                        new_filename = f'{filename}_{extension}{file_type}'
+                        print(f'File will be saved as: {new_filename}')
 
                     self.send_object_message(s, command)
                     message = self.receive_object_message(s)
@@ -439,7 +447,7 @@ class Client:
                     self.input_thread_event.set()
                     if message['get'] == 'OK':
                         # Initialize download
-                        self.command_data_communication_buffer.put({'get': command['get']})
+                        self.command_data_communication_buffer.put({'get': [command['get'], new_filename]})
                         self.data_thread_event.set()
                         self.command_thread_event.wait()
                         self.command_thread_event.clear()
@@ -494,7 +502,8 @@ class Client:
 
             command = self.command_data_communication_buffer.get()
             if 'get' in command.keys():
-                with open(command['get'], 'wb') as f:
+                f_name = command['get'][0] if command['get'][1] == '' else command['get'][1]
+                with open(f_name, 'wb') as f:
                     self.command_thread_event.set()  # Inform Command Channel about readiness
                     try:
                         data_header = data_s.recv(Client.HEADER_LENGTH)
