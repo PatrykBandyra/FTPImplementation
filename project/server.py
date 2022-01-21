@@ -401,7 +401,7 @@ class Server:
                 with open(command['get'], 'rb') as f:
 
                     data = f.read()
-                    data = Server.encrypt(self, data, key, iv)
+                    data = Server.encrypt(data, key, iv)
 
                     filesize = len(data)
                     data_header = bytes(f'{filesize:<{Server.HEADER_LENGTH}}', 'utf-8')
@@ -425,7 +425,7 @@ class Server:
                             print(f'Failed to receive data! Connection: {data_conn.getsockname()}')
                             break
 
-                        data = Server.decrypt(self, data, key, iv)
+                        data = Server.decrypt(data, key, iv)
 
                         if command['is_text_mode']:
                             data = data.replace(b"/n/r", b"/n")
@@ -441,16 +441,18 @@ class Server:
                         print(f'Exception occurred during receiving data! Connection: {data_conn.getsockname()}\n{e}')
                         return None
 
-    def decrypt(self, message, key, iv):
+    @staticmethod
+    def decrypt(message, key, iv):
         """
         Decrypts received message
         """
         message = base64.b64decode(message)
         cipher = AES.new(key, AES.MODE_CBC, iv)
         decrypted_text = cipher.decrypt(message)
-        return (decrypted_text[:-ord(decrypted_text[len(decrypted_text) - 1:])])
+        return decrypted_text[:-ord(decrypted_text[len(decrypted_text) - 1:])]
 
-    def encrypt(self, message, key, iv):
+    @staticmethod
+    def encrypt(message, key, iv):
         """
         Encrypts passed message that is going to be sent
         """
