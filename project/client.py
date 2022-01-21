@@ -2,7 +2,6 @@ import socket
 import threading
 import argparse
 import queue
-# import time
 import time
 from typing import Tuple, Optional, List
 import pickle
@@ -236,6 +235,9 @@ class Client:
                 self.emergency_exit = False
 
             def preloop(self) -> None:
+                """
+                Runs before the start of input loop.
+                """
                 HandleInput.prompt = f'(local) {self.current_local_dir}> '
 
             def do_cld(self, *args) -> None:
@@ -264,17 +266,16 @@ class Client:
                 try:
                     path = args[0]
                     client.command_buffer.put({'cd': path})
-                    client.command_thread_event.set()
+                    client.command_thread_event.set()  # Inform command thread
                     client.input_thread_event.wait()  # Wait for command thread response
-                    client.input_thread_event.clear()
+                    client.input_thread_event.clear()  # Clear your own flag
                     command = client.command_buffer.get()
                     if 'cd' in command.keys() and command['cd'] != 'ERR':
                         self.current_dir = command['cd']
                         if not self.show_local:
                             HandleInput.prompt = f'(remote) {self.current_dir}> '
                     elif 'ERR' in command.keys():
-                        self.emergency_exit = True
-                        print('Closing app...')
+                        self.do_exit(args)
                     else:
                         print('*** Invalid path to directory or directory name.')
                 except Exception as e:
@@ -372,10 +373,7 @@ class Client:
                     if 'ls' in command.keys() and command['ls'] != 'ERR':
                         print(command['ls'])
                     elif 'ERR' in command.keys():
-                        client.command_buffer.put({'exit': ''})
-                        client.command_thread_event.set()
-                        self.emergency_exit = True
-                        print('Closing app...')
+                        self.do_exit(args)
                     else:
                         print('*** Invalid arguments for command "ls".')
                 except Exception as e:
@@ -396,7 +394,11 @@ class Client:
                     print('*** Invalid arguments for command "exit".')
 
             def postcmd(self, stop: bool, line: str) -> bool:
-                return True if self.emergency_exit else False
+                """
+                Runs after each execution of input function. Checks for emergency_exit flag.
+                If flag is set, then input loop will be closed.
+                """
+                return self.emergency_exit
 
         client.input_handler = HandleInput()
         client.input_handler.cmdloop()
@@ -468,6 +470,7 @@ class Client:
                 print(f'*** Received invalid command: {command}')
 
         # Exit app
+        self.data_thread_event.set()
         self.command_thread_event.wait()  # Sleep until Data Channel is not closed
         self.command_thread_event.clear()  # Reset flag
         s.close()
