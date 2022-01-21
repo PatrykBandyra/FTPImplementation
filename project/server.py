@@ -424,7 +424,7 @@ class Server:
                         if not data:
                             print(f'Failed to receive data! Connection: {data_conn.getsockname()}')
                             break
-                        
+
                         data = Server.decrypt(self, data)
 
                         if command['is_text_mode']:
@@ -448,13 +448,14 @@ class Server:
         message = base64.b64decode(message)
         cipher = AES.new(self.key, AES.MODE_CBC, self.iv)
         decrypted_text = cipher.decrypt(message)
-        return (decrypted_text[:-ord(decrypted_text[len(decrypted_text)-1:])])
+        return (decrypted_text[:-ord(decrypted_text[len(decrypted_text) - 1:])])
 
     def encrypt(self, message):
         """
         Encrypts passed message that is going to be sent
         """
-        message = message + (AES.block_size - len(message) % AES.block_size) * str.encode(chr(AES.block_size - len(message) % AES.block_size))
+        message = message + (AES.block_size - len(message) % AES.block_size) * str.encode(
+            chr(AES.block_size - len(message) % AES.block_size))
         cipher = AES.new(self.key, AES.MODE_CBC, self.iv)
         encrypted_text = cipher.encrypt(message)
         return base64.b64encode(encrypted_text)
