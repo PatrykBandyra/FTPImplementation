@@ -7,6 +7,7 @@ from typing import Tuple, Optional
 import pickle
 import json
 import os
+import random
 from types import SimpleNamespace
 from file_tree_maker import FileTreeMaker
 from Crypto.Cipher import AES
@@ -337,7 +338,36 @@ class Server:
                         self.send_object_message(conn, {'get': 'ERR'})
 
                 elif 'put' in command.keys():
-                    pass
+                    try:
+                        # Create remote filepath from local filepath
+                        filepath = command['put']  # Local filepath
+                        _, filename = os.path.split(filepath)
+                        filepath = os.path.join(current_dir, filename)  # Filepath for file to be uploaded to
+
+                        # Check if generated filepath already exists
+                        info = ''
+                        if os.path.isfile(filepath):
+                            # Add random extension to filename in such case
+                            path, filename = os.path.split(filepath)
+                            filename, file_type = os.path.splitext(filename)
+                            extension = ''.join([str(random.randint(0, 9)) for _ in range(10)])
+                            new_filename = f'{filename}_{extension}{file_type}'
+                            filepath = os.path.join(current_dir, new_filename)
+
+                            info = f'File with such name already exists on server. ' \
+                                   f'File will be uploaded as: {new_filename}'
+
+                        # Init download (from client to server)
+                        communication_buffer.put({'put': filepath})
+                        self.send_object_message(conn, {'put': ['OK', info]})
+                        data_channel_event.set()
+                        command_channel_event.wait()  # Wait for Data Channel info
+                        command_channel_event.clear()
+                        self.send_object_message(conn, {'put': 'ready'})
+
+                    except Exception as e:
+                        print(f'Exception occurred in command channel of {address}\n{e}')
+                        self.send_object_message(conn, {'put': 'ERR'})
 
                 else:
                     print(f'Received invalid command from {address}')
@@ -364,8 +394,8 @@ class Server:
                 print(f'Data Channel with {data_conn.getsockname()} closed.')
                 data_conn.close()
                 break
-            elif 'get' in command:  # File upload
-                # TODO: mode checking
+
+            elif 'get' in command.keys():
                 with open(command['get'], 'rb') as f:
 
                     data = f.read()
@@ -375,6 +405,29 @@ class Server:
                     data_header = bytes(f'{filesize:<{Server.HEADER_LENGTH}}', 'utf-8')
 
                     data_conn.sendall(data_header + data)
+
+            elif 'put' in command.keys():
+                with open(command['put'], 'wb') as f:
+                    command_channel_event.set()  # Inform about readiness to download a file
+
+                    try:
+                        data_header = data_conn.recv(Server.HEADER_LENGTH)
+                        if not data_header:
+                            print(f'Failed to receive data header! Connection: {data_conn.getsockname()}')
+                            break
+
+                        data_length = int(data_header.decode('utf-8').strip())
+                        data = data_conn.recv(data_length)
+
+                        if not data:
+                            print(f'Failed to receive data! Connection: {data_conn.getsockname()}')
+                            break
+
+                        f.write(data)
+
+                    except Exception as e:
+                        print(f'Exception occurred during receiving data! Connection: {data_conn.getsockname()}\n{e}')
+                        return None
 
     def decrypt(self, message):
         """
