@@ -120,7 +120,7 @@ class Server:
             conn.close()
             return
 
-        print(f'Data channel established with {address} on port {conn.getsockname()[1]}')
+        print(f'Data channel established with {address} on port {data_conn.getsockname()[1]}')
 
         communication_buffer = queue.Queue()
         data_channel_event = threading.Event()
