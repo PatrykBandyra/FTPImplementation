@@ -190,10 +190,12 @@ class Server:
             port = int(data_channel.getsockname()[1])
             Server.send_object_message(conn, {'port': port})
 
-            self.key = ''.join(secrets.choice(string.ascii_letters + string.digits) for x in range(32))
+            key = ''.join(secrets.choice(string.ascii_letters + string.digits) for x in range(32))
+            self.key = key.encode("utf8")
             Server.send_object_message(conn, self.key)
 
-            self.iv = ''.join(secrets.choice(string.ascii_letters + string.digits) for x in range(16))
+            iv = ''.join(secrets.choice(string.ascii_letters + string.digits) for x in range(16))
+            self.iv = iv.encode("utf8")
             Server.send_object_message(conn, self.iv)
 
             connected = False

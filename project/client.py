@@ -217,10 +217,12 @@ class Client:
                 port = int(data_channel.getsockname()[1])
                 Client.send_object_message(s, {'port': port})
 
-                Client.key = ''.join(secrets.choice(string.ascii_letters + string.digits) for x in range(32))
+                key = ''.join(secrets.choice(string.ascii_letters + string.digits) for x in range(32))
+                Client.key = key.encode("utf8")
                 Client.send_object_message(s, Client.key)
 
-                Client.iv = ''.join(secrets.choice(string.ascii_letters + string.digits) for x in range(16))
+                iv = ''.join(secrets.choice(string.ascii_letters + string.digits) for x in range(16))
+                Client.iv = iv.encode("utf8")
                 Client.send_object_message(s, Client.iv)
 
                 connected = False
