@@ -165,7 +165,7 @@ class Client:
         if self.mode == 'p':
             return self.connect_data_channel_passive(s)
         else:
-            return Client.connect_data_channel_active(s)
+            return self.connect_data_channel_active(s)
 
     def connect_data_channel_passive(self, s: socket.socket) -> Optional[socket.socket]:
         """
@@ -198,8 +198,7 @@ class Client:
             print(f'Exception occurred during attempt to establish connection with Data Channel in passive mode!\n{e}')
             return None
 
-    @staticmethod
-    def connect_data_channel_active(s: socket.socket) -> Optional[socket.socket]:
+    def connect_data_channel_active(self, s: socket.socket) -> Optional[socket.socket]:
         """
         Performs connection with server Data Channel in active mode.
         """
@@ -218,12 +217,12 @@ class Client:
                 Client.send_object_message(s, {'port': port})
 
                 key = ''.join(secrets.choice(string.ascii_letters + string.digits) for x in range(32))
-                Client.key = key.encode("utf8")
-                Client.send_object_message(s, Client.key)
+                self.key = key.encode("utf8")
+                Client.send_object_message(s, self.key)
 
                 iv = ''.join(secrets.choice(string.ascii_letters + string.digits) for x in range(16))
-                Client.iv = iv.encode("utf8")
-                Client.send_object_message(s, Client.iv)
+                self.iv = iv.encode("utf8")
+                Client.send_object_message(s, self.iv)
 
                 connected = False
 
@@ -231,7 +230,7 @@ class Client:
                     data_conn, address = data_channel.accept()
                     connected = True
 
-            return data_conn
+                return data_conn
 
         except Exception as e:
             print(f'Exception occurred during attempt to establish connection with Data Channel in active mode!\n{e}')

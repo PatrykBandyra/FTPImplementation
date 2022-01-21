@@ -170,7 +170,7 @@ class Server:
             if connection_mode_message['mode'] == 'p':
                 return self.connect_data_channel_passive(conn)
             elif connection_mode_message['mode'] == 'a':
-                return Server.connect_data_channel_active(conn)
+                return self.connect_data_channel_active(conn)
             else:
                 raise Exception('Client sent invalid Data Channel connection mode argument!')
 
@@ -206,30 +206,28 @@ class Server:
 
             return data_conn
 
-    @staticmethod
-    def connect_data_channel_active(s: socket.socket) -> Optional[socket.socket]:
+    def connect_data_channel_active(self, s: socket.socket) -> Optional[socket.socket]:
         """
         Performs connection with server Data Channel in active mode.
         """
         try:
             message = Server.receive_object_message(s)
-            print(message['port'])
+
             if not message['port']:
                 return None
 
             key_message = Server.receive_object_message(s)
-            Server.key = key_message
+            self.key = key_message
 
             iv_message = Server.receive_object_message(s)
-            Server.iv = iv_message
+            self.iv = iv_message
 
             # Connect to a port specified by client
-            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as data_s:
-                data_s.settimeout(5)
-                addr = s.getsockname()[0]
-                data_s.connect((addr, message['port']))
+            data_s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            data_s.settimeout(5)
+            data_s.connect((s.getsockname()[0], message['port']))
 
-                return data_s
+            return data_s
 
         except Exception as e:
             print(f'Exception occurred during attempt to establish connection with Data Channel in active mode!\n{e}')
