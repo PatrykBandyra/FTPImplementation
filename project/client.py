@@ -283,9 +283,10 @@ class Client:
 
             def do_get(self, args) -> None:
                 """
-                Downloads file from specified path.
+                Downloads file from specified path. Default mode = binary.
                 Syntax:
-                get <path>
+                get <path> <mode>
+                mode = -b | -t
                 """
                 args = args.split()
                 # Add command to command buffer and wait for response
@@ -509,8 +510,6 @@ class Client:
                             break
 
                         f.write(data)
-
-                        print('File downloaded successfully!')
 
                     except Exception as e:
                         print(f'Exception occurred during receiving data!\n{e}')
