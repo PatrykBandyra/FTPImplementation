@@ -33,9 +33,6 @@ class Server:
         self.files_in_transfer_buffer = list()  # Not thread-safe -> critical section needed
         self.files_in_transfer_mutex = threading.Lock()
 
-        self.key = None
-        self.iv = None
-
     @staticmethod
     def get_args() -> argparse.Namespace:
         parser = argparse.ArgumentParser(description='Run simple FTP server.')
@@ -113,7 +110,7 @@ class Server:
         print(f'User authentication from {address} successful!')
 
         # Agree on Data Channel
-        data_conn = self.agree_on_data_channel(conn, address)
+        data_conn, key, iv = self.agree_on_data_channel(conn, address)
         if not data_conn:
             print(f'Failed to establish Data Channel connection with {address}')
             print(f'Connection with {address} closed')
@@ -128,7 +125,8 @@ class Server:
 
         # Start Data Channel thread
         dt = threading.Thread(target=self.handle_data_channel, args=(data_conn, communication_buffer,
-                                                                     data_channel_event, command_channel_event))
+                                                                     data_channel_event, command_channel_event,
+                                                                     key, iv))
         dt.start()
 
         # Listen for new commands from user, verify and respond to them
@@ -160,7 +158,8 @@ class Server:
             print(f'Exception occurred during user authentication!\n{e}')
             return False
 
-    def agree_on_data_channel(self, conn: socket.socket, address: Tuple[str, int]) -> Optional[socket.socket]:
+    def agree_on_data_channel(self, conn: socket.socket, address: Tuple[str, int]) -> \
+            Optional[Tuple[socket.socket, bytes, bytes]]:
         """
         Negotiates Data Channel.
         """
@@ -178,7 +177,7 @@ class Server:
             print(f'Exception occurred during attempt to establish Data Channel connection with {address}\n{e}')
             return None
 
-    def connect_data_channel_passive(self, conn: socket.socket) -> socket.socket:
+    def connect_data_channel_passive(self, conn: socket.socket) -> Tuple[socket.socket, bytes, bytes]:
         """
         Performs connection with server Data Channel in passive mode.
         """
@@ -191,12 +190,12 @@ class Server:
             Server.send_object_message(conn, {'port': port})
 
             key = ''.join(secrets.choice(string.ascii_letters + string.digits) for x in range(32))
-            self.key = key.encode("utf8")
-            Server.send_object_message(conn, self.key)
+            key = key.encode("utf8")
+            Server.send_object_message(conn, key)
 
             iv = ''.join(secrets.choice(string.ascii_letters + string.digits) for x in range(16))
-            self.iv = iv.encode("utf8")
-            Server.send_object_message(conn, self.iv)
+            iv = iv.encode("utf8")
+            Server.send_object_message(conn, iv)
 
             connected = False
 
@@ -204,9 +203,9 @@ class Server:
                 data_conn, address = data_channel.accept()
                 connected = True
 
-            return data_conn
+            return data_conn, key, iv
 
-    def connect_data_channel_active(self, s: socket.socket) -> Optional[socket.socket]:
+    def connect_data_channel_active(self, s: socket.socket) -> Optional[Tuple[socket.socket, dict, dict]]:
         """
         Performs connection with server Data Channel in active mode.
         """
@@ -217,17 +216,17 @@ class Server:
                 return None
 
             key_message = Server.receive_object_message(s)
-            self.key = key_message
+            key = key_message
 
             iv_message = Server.receive_object_message(s)
-            self.iv = iv_message
+            iv = iv_message
 
             # Connect to a port specified by client
             data_s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             data_s.settimeout(5)
             data_s.connect((s.getsockname()[0], message['port']))
 
-            return data_s
+            return data_s, key, iv
 
         except Exception as e:
             print(f'Exception occurred during attempt to establish connection with Data Channel in active mode!\n{e}')
@@ -382,7 +381,8 @@ class Server:
                     print(f'Exception occurred in command channel of {address}\n{e}')
 
     def handle_data_channel(self, data_conn: socket.socket, communication_buffer: queue.Queue,
-                            data_channel_event: threading.Event, command_channel_event: threading.Event) -> None:
+                            data_channel_event: threading.Event, command_channel_event: threading.Event,
+                            key: bytes, iv: bytes) -> None:
         """
         Handles Data Channel - sending and receiving files.
         """
@@ -401,7 +401,7 @@ class Server:
                 with open(command['get'], 'rb') as f:
 
                     data = f.read()
-                    data = Server.encrypt(self, data)
+                    data = Server.encrypt(self, data, key, iv)
 
                     filesize = len(data)
                     data_header = bytes(f'{filesize:<{Server.HEADER_LENGTH}}', 'utf-8')
@@ -425,7 +425,7 @@ class Server:
                             print(f'Failed to receive data! Connection: {data_conn.getsockname()}')
                             break
 
-                        data = Server.decrypt(self, data)
+                        data = Server.decrypt(self, data, key, iv)
 
                         if command['is_text_mode']:
                             data = data.replace(b"/n/r", b"/n")
@@ -441,22 +441,22 @@ class Server:
                         print(f'Exception occurred during receiving data! Connection: {data_conn.getsockname()}\n{e}')
                         return None
 
-    def decrypt(self, message):
+    def decrypt(self, message, key, iv):
         """
         Decrypts received message
         """
         message = base64.b64decode(message)
-        cipher = AES.new(self.key, AES.MODE_CBC, self.iv)
+        cipher = AES.new(key, AES.MODE_CBC, iv)
         decrypted_text = cipher.decrypt(message)
         return (decrypted_text[:-ord(decrypted_text[len(decrypted_text) - 1:])])
 
-    def encrypt(self, message):
+    def encrypt(self, message, key, iv):
         """
         Encrypts passed message that is going to be sent
         """
         message = message + (AES.block_size - len(message) % AES.block_size) * str.encode(
             chr(AES.block_size - len(message) % AES.block_size))
-        cipher = AES.new(self.key, AES.MODE_CBC, self.iv)
+        cipher = AES.new(key, AES.MODE_CBC, iv)
         encrypted_text = cipher.encrypt(message)
         return base64.b64encode(encrypted_text)
 
