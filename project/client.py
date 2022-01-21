@@ -11,6 +11,10 @@ import cmd
 import ssl
 from types import SimpleNamespace
 from file_tree_maker import FileTreeMaker
+from Crypto.Cipher import AES
+import string
+import secrets
+import base64
 
 
 class Client:
@@ -38,6 +42,9 @@ class Client:
         self.exit = False
 
         self.input_handler = None
+
+        self.key = None
+        self.iv = None
 
     @staticmethod
     def get_args() -> argparse.Namespace:
@@ -171,6 +178,12 @@ class Client:
             port_number_message = Client.receive_object_message(s)
             port_number = int(port_number_message['port'])
 
+            key_message = Client.receive_object_message(s)
+            self.key = key_message
+
+            iv_message = Client.receive_object_message(s)
+            self.iv = iv_message
+
             # Connect to specified server port
             data_s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             data_s.settimeout(5)
@@ -201,6 +214,12 @@ class Client:
                 port = int(data_channel.getsockname()[1])
                 Client.send_object_message(s, {'port': port})
 
+                Client.key = ''.join(secrets.choice(string.ascii_letters + string.digits) for x in range(32))
+                Client.send_object_message(s, Client.key)
+
+                Client.iv = ''.join(secrets.choice(string.ascii_letters + string.digits) for x in range(16))
+                Client.send_object_message(s, Client.iv)
+
                 connected = False
 
                 while not connected:
@@ -212,6 +231,24 @@ class Client:
         except Exception as e:
             print(f'Exception occurred during attempt to establish connection with Data Channel in active mode!\n{e}')
             return None
+
+    def decrypt(self, message):
+        """
+        Decrypts received message
+        """
+        message = base64.b64decode(message)
+        cipher = AES.new(self.key, AES.MODE_CBC, self.iv)
+        decrypted_text = cipher.decrypt(message)
+        return (decrypted_text[:-ord(decrypted_text[len(decrypted_text)-1:])])
+
+    def encrypt(self, message):
+        """
+        Encrypts passed message that is going to be sent
+        """
+        message = message + (AES.block_size - len(message) % AES.block_size) * str.encode(chr(AES.block_size - len(message) % AES.block_size))
+        cipher = AES.new(self.key, AES.MODE_CBC, self.iv)
+        encrypted_text = cipher.encrypt(message)
+        return base64.b64encode(encrypted_text)
 
     def handle_user_input(self) -> None:
         """
@@ -507,6 +544,8 @@ class Client:
                         if not data:
                             print('Failed to receive data!')
                             break
+
+                        data = Client.decrypt(self, data)
 
                         f.write(data)
 

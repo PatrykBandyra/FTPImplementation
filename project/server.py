@@ -9,6 +9,10 @@ import json
 import os
 from types import SimpleNamespace
 from file_tree_maker import FileTreeMaker
+from Crypto.Cipher import AES
+import string
+import secrets
+import base64
 
 
 class Server:
@@ -26,6 +30,9 @@ class Server:
         # Buffer for storing file paths of files currently being uploaded to the server
         self.files_in_transfer_buffer = list()  # Not thread-safe -> critical section needed
         self.files_in_transfer_mutex = threading.Lock()
+
+        self.key = None
+        self.iv = None
 
     @staticmethod
     def get_args() -> argparse.Namespace:
@@ -181,6 +188,12 @@ class Server:
             port = int(data_channel.getsockname()[1])
             Server.send_object_message(conn, {'port': port})
 
+            self.key = ''.join(secrets.choice(string.ascii_letters + string.digits) for x in range(32))
+            Server.send_object_message(conn, self.key)
+
+            self.iv = ''.join(secrets.choice(string.ascii_letters + string.digits) for x in range(16))
+            Server.send_object_message(conn, self.iv)
+
             connected = False
 
             while not connected:
@@ -199,6 +212,12 @@ class Server:
             print(message['port'])
             if not message['port']:
                 return None
+
+            key_message = Server.receive_object_message(s)
+            Server.key = key_message
+
+            iv_message = Server.receive_object_message(s)
+            Server.iv = iv_message
 
             # Connect to a port specified by client
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as data_s:
@@ -350,9 +369,30 @@ class Server:
                 with open(command['get'], 'rb') as f:
 
                     data = f.read()
+                    data = Server.encrypt(self, data)
+
                     filesize = len(data)
                     data_header = bytes(f'{filesize:<{Server.HEADER_LENGTH}}', 'utf-8')
+
                     data_conn.sendall(data_header + data)
+
+    def decrypt(self, message):
+        """
+        Decrypts received message
+        """
+        message = base64.b64decode(message)
+        cipher = AES.new(self.key, AES.MODE_CBC, self.iv)
+        decrypted_text = cipher.decrypt(message)
+        return (decrypted_text[:-ord(decrypted_text[len(decrypted_text)-1:])])
+
+    def encrypt(self, message):
+        """
+        Encrypts passed message that is going to be sent
+        """
+        message = message + (AES.block_size - len(message) % AES.block_size) * str.encode(chr(AES.block_size - len(message) % AES.block_size))
+        cipher = AES.new(self.key, AES.MODE_CBC, self.iv)
+        encrypted_text = cipher.encrypt(message)
+        return base64.b64encode(encrypted_text)
 
 
 def main() -> None:
