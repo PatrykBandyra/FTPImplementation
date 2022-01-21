@@ -172,11 +172,11 @@ class Client:
             port_number = int(port_number_message['port'])
 
             # Connect to specified server port
-            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as data_s:
-                data_s.settimeout(5)
-                data_s.connect((self.server_host, port_number))
+            data_s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            data_s.settimeout(5)
+            data_s.connect((self.server_host, port_number))
 
-                return data_s
+            return data_s
 
         except Exception as e:
             print(f'Exception occurred during attempt to establish connection with Data Channel in passive mode!\n{e}')
