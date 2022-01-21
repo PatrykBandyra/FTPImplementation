@@ -1,18 +1,18 @@
-import random
-import socket
-import threading
 import argparse
-import queue
-import time
-from typing import Tuple, Optional, List
-import pickle
+import cmd
 import hashlib
 import os
-import cmd
-import ssl
-from types import SimpleNamespace
-from file_tree_maker import FileTreeMaker
+import pickle
 import platform
+import queue
+import random
+import socket
+import ssl
+import threading
+from types import SimpleNamespace
+from typing import Optional
+
+from file_tree_maker import FileTreeMaker
 
 
 class Client:
@@ -40,6 +40,7 @@ class Client:
         self.exit = False
 
         self.input_handler = None
+        self.is_text_mode = False
 
     @staticmethod
     def get_args() -> argparse.Namespace:
@@ -291,21 +292,21 @@ class Client:
                 mode = -b | -t
                 """
                 args = args.split()
-                # Add command to command buffer and wait for response
-                client.is_text_mode=False
+                client.is_text_mode = False
                 try:
                     for arg in args:
-                        if(arg=="-t" or arg=="-T"):
-                            client.is_text_mode=True
+                        if arg == '-t' or arg == '-T':
+                            client.is_text_mode = True
 
-                    i=0
-                    while(i<len(args) and len(args[i]) and args[i][0]=='-'):
-                        i+=1
-                    if(i==len(args)):
-                        print("no file specified")
+                    i = 0
+                    while i < len(args) and len(args[i]) and args[i][0] == '-':
+                        i += 1
+                    if i == len(args):
+                        print('*** No file specified')
                         return
                     path = args[i]
 
+                    # Add command to command buffer and wait for response
                     client.command_buffer.put({'get': path})
                     client.command_thread_event.set()
                     client.input_thread_event.wait()  # Wait for command thread response
@@ -320,6 +321,37 @@ class Client:
                         print('*** Invalid file path.')
                 except Exception as e:
                     print(f'Exception occurred during handling "get" command\n{e}')
+
+            def do_put(self, args) -> None:
+                """
+                Uploads file from specified path to current remote directory. Default mode = binary.
+                Syntax:
+                put <path> <mode>
+                mode = -b | -t
+                """
+                try:
+                    args = args.split()
+                    path = args[0]
+                    # Check if specified file exists
+                    if not os.path.isfile(path):
+                        print('*** Invalid file path.')
+                        return
+                    # Add command to command buffer and wait for response
+                    client.command_buffer.put({'put': path})
+                    client.command_thread_event.set()
+                    client.input_thread_event.wait()  # Wait for command thread response
+                    client.input_thread_event.clear()
+                    command = client.command_buffer.get()
+                    if 'put' in command.keys() and command['put'] != 'ERR':
+                        print('Uploading...')
+                    elif 'ERR' in command.keys():  # No connection
+                        self.emergency_exit = True
+                        print('Closing app...')
+                    else:
+                        print('*** Invalid file path.')
+
+                except Exception as e:
+                    print(f'Exception occurred during handling "put" command\n{e}')
 
             def do_fl(self, args) -> None:
                 """
@@ -440,8 +472,6 @@ class Client:
                     self.input_thread_event.set()
 
             elif 'get' in command.keys():
-                # TODO: mode checking
-
                 try:
                     new_filename = ''
                     # Check if file with specific name exists locally
@@ -472,7 +502,27 @@ class Client:
                     self.input_thread_event.set()
 
             elif 'put' in command.keys():
-                pass
+                try:
+                    self.send_object_message(s, command)
+                    message = self.receive_object_message(s)
+                    if message['put'][0] == 'OK':
+                        if message['put'][1] != '':
+                            print(message['put'][1])
+
+                        self.command_buffer.put({'put': 'OK'})
+                        self.input_thread_event.set()
+
+                        self.command_data_communication_buffer.put(command)
+                        message = self.receive_object_message(s)
+                        if message['put'] == 'ready':
+                            # Inform Data Channel
+                            self.data_thread_event.set()
+
+                except Exception as e:
+                    print(f'Exception occurred in Command Channel while handling "put" command\n{e}')
+                    self.exit = True
+                    self.command_buffer.put({'ERR': ''})
+                    self.input_thread_event.set()
 
             elif 'exit' in command.keys():
                 # First close Data Channel
@@ -531,18 +581,27 @@ class Client:
                             print('Failed to receive data!')
                             break
 
-                        if(self.is_text_mode):
+                        if self.is_text_mode:
                             data = data.replace(b"/n/r", b"/n")
-                            if(platform.system()=="Windows"):
+                            if platform.system() == "Windows":
                                 data = data.replace(b"/n", b"/n/r")
-                            elif(platform.system()!="Linux"):
-                                print("detected an unsupported sustem: "+platform.system()+", assuming Linux-like behavior")
+                            elif platform.system() != "Linux":
+                                print(f'detected an unsupported system: {platform.system()}, '
+                                      f'assuming Linux-like behavior')
 
                         f.write(data)
 
                     except Exception as e:
                         print(f'Exception occurred during receiving data!\n{e}')
                         return None
+
+            elif 'put' in command.keys():
+                with open(command['put'], 'rb') as f:
+
+                    data = f.read()
+                    filesize = len(data)
+                    data_header = bytes(f'{filesize:<{Client.HEADER_LENGTH}}', 'utf-8')
+                    data_s.sendall(data_header + data)
 
 
 def main() -> None:
